@@ -1,47 +1,60 @@
+# File: docker-compose.yml
+# Orchestrates HDFS cluster with Python app
+
+version: "3.8"
+
 services:
+  # Hadoop NameNode - Master node that manages the file system
   namenode:
     image: bde2020/hadoop-namenode:2.0.0-hadoop3.2.1-java8
     container_name: namenode
+    restart: always
     ports:
-      - "9870:9870"   # Web UI
-      - "9000:9000"   # HDFS port
+      - "9870:9870"  # Web UI for NameNode
+      - "9000:9000"  # HDFS port
     environment:
-      - CLUSTER_NAME=test-cluster
+      - CLUSTER_NAME=test
+      - CORE_CONF_fs_defaultFS=hdfs://namenode:9000
     volumes:
-      - namenode-data:/hadoop/dfs/name
+      - hadoop_namenode:/hadoop/dfs/name
     networks:
       - hadoop
 
+  # Hadoop DataNode - Worker node that stores actual data
   datanode:
     image: bde2020/hadoop-datanode:2.0.0-hadoop3.2.1-java8
     container_name: datanode
+    restart: always
+    ports:
+      - "9864:9864"  # Web UI for DataNode
     environment:
       - CORE_CONF_fs_defaultFS=hdfs://namenode:9000
-      - CLUSTER_NAME=test-cluster
+    depends_on:
+      - namenode
     volumes:
-      - datanode-data:/hadoop/dfs/data
-    depends_on:
-      - namenode
+      - hadoop_datanode:/hadoop/dfs/data
     networks:
       - hadoop
 
+  # Python application for CRUD operations
   python-app:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    container_name: python-app
+    build: .
+    container_name: python-hdfs-app
     depends_on:
       - namenode
+      - datanode
+    environment:
+      - HDFS_NAMENODE_URL=http://namenode:9870
     networks:
       - hadoop
-    environment:
-      - HDFS_URL=http://namenode:9870
-      - HDFS_USER=root
+    command: python app.py
 
+# Named volumes for persistent storage
 volumes:
-  namenode-data:
-  datanode-data:
+  hadoop_namenode:
+  hadoop_datanode:
 
+# Custom network for container communication
 networks:
   hadoop:
     driver: bridge
